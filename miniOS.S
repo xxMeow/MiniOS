@@ -49,7 +49,6 @@ main:
 
 @ System Setup ************************************************************ END
 
-
 @ Configuration ********************************************************* BEGIN
 
   // Private Timer -------------------------------------------- BEGIN
@@ -113,7 +112,6 @@ main:
 
 @ Configuration *********************************************************** END
 
-
 @ Application *********************************************************** BEGIN
 
   // TCB Setup ------------------------------------------------ BEGIN
@@ -131,9 +129,9 @@ main:
     str r1, [r0]
     ldr r1, =task2_c // C code
     str r1, [r0, #4]
-    ldr r1, =task1_tcb // next tcb
+    ldr r1, =task3_tcb
     str r1, [r0, #8]
-    /* Task3*/
+    // * Task3
     ldr r0, =task3_tcb // tcb addr
     ldr r1, =task3_stack_irq_btm // irq stack (context backup stack)
     str r1, [r0]
@@ -181,16 +179,18 @@ main:
     orr r1, r1, r2
     str r1, [r0] // time starts from now since PRIVATE_CONTROL[0] is set
 
+    cps #0x12 // enter IRQ mode to use its registers
+
     // * Read TCB of Current Task
     ldr r0, =curr_tcb_ptr // read tcb of the first task
     ldr r1, [r0] // r1 = *(curr_tcb_ptr) = pointer of current task's tcb
-    cps #0x12 // enter IRQ mode to use its registers
     ldr sp, [r1] // sp_irq = task's stack_irq
     ldr lr, [r1, #4] // lr_irq = task's pc
     ldr r0, [sp], #4 // spsr_irq = task's cpsr
     msr spsr, r0
     // * Set Context
-    ldmfd sp, {r0-r14}^ // set context of task TODO: should sp be modified and write back to TCB?
+    ldmfd sp, {r0-r14}^ // set context of task
+    add sp, sp, #60
     // * Start Task
     movs pc, lr // since spsr_irq[Mode] == usr, CPU will run in usr mode from now
 
@@ -204,7 +204,51 @@ forever:
 csd_irq:
 @ IRQ ******************************************************************* BEGIN
 
-    // * use usr_stack to backup its context
+  // Save Context & Update Info ------------------------------- BEGIN
+    // * Save Context
+    stmfd sp, {r0-r14}^ // push r0-r14
+    sub sp, sp, #60
+    mrs r0, spsr // push cpsr
+    str r0, [sp, #-4]!
+    // * Update TCB of Current Task
+    ldr r0, =curr_tcb_ptr // read tcb of the first task
+    ldr r1, [r0] // r1 = *(curr_tcb_ptr) = pointer of current task's tcb
+    str sp, [r1] // update stack_irq_ptr
+    sub lr, lr, #4 // modify task's pc
+    str lr, [r1, #4] // update pc_task
+    // * Update Current Task Pointer
+    ldr r2, [r1, #8] // read the next task's tcb
+    str r2, [r0] // update curr_tcb_ptr to it
+  // Save Context & Update Info --------------------------------- END
+
+  // Handle Interrupt ----------------------------------------- BEGIN
+    // * Read ACK
+    ldr r0, =GICC_IAR
+    ldr r12, [r0]
+    // * Clear Event Flag of Timer
+    ldr r0, =PRIVATE_STATUS
+    ldr r1, [r0] // reread status register
+    orr r1, r1, #1 // clear the event flag
+    str r1, [r0] // store it back to the status register
+    // * Mark the End of Interrupt
+    ldr r0, =GICC_EOIR
+    str r12, [r0]
+  // Handle Interrupt ------------------------------------------- END
+
+  // Recover Context ------------------------------------------ BEGIN
+    // * Read TCB of Current Task
+    ldr r0, =curr_tcb_ptr // read tcb of the first task
+    ldr r1, [r0] // r1 = *(curr_tcb_ptr) = pointer of current task's tcb
+    ldr sp, [r1] // sp_irq = task's stack_irq
+    ldr lr, [r1, #4] // lr_irq = task's pc
+    ldr r0, [sp], #4 // spsr_irq = task's cpsr
+    msr spsr, r0
+    // * Set Context
+    ldmfd sp, {r0-r14}^ // set context of task
+    add sp, sp, #60
+    // * Start Task
+    movs pc, lr // since spsr_irq[Mode] == usr, CPU will run in usr mode from now
+  // Recover Context -------------------------------------------- END
 
 @ IRQ ********************************************************************* END
 
@@ -277,7 +321,6 @@ task3_stack_usr_top:
 // current TCB pointer
 curr_tcb_ptr:
     .space 4
-
 /*
 struct TCB {
     tcb1_stack_irq_ptr; // low address
@@ -294,4 +337,3 @@ task2_tcb:
 // TCB3
 task3_tcb:
     .space 12
-
