@@ -2,10 +2,9 @@
 #include "uart_regs.h"
 #include "uart_init.s"
 
-#define TIME_LOAD_VALUE 5203124
+#define TIME_LOAD_VALUE 41624
 #define CPSR_INIT_VALUE 0x6000050
 
-.extern csd_main
 .extern task1_c
 .extern task2_c
 .extern task3_c
@@ -15,7 +14,7 @@
 csd_vector_table:
     b csd_reset
     b .
-    b csd_svc
+    b .
     b .
     b .
     b .
@@ -31,9 +30,6 @@ main:
     cpsID i // disable IRQ interrupt to setup CPU: CPSR'I = 1
 
   // Stack Setup for Each Mode -------------------------------- BEGIN
-    // * SVC Stack
-    cps #0x13
-    ldr sp, =svc_stack_top
     // * IRQ Stack
     cps #0x12
     ldr sp, =irq_stack_top
@@ -52,15 +48,15 @@ main:
 @ Configuration ********************************************************* BEGIN
 
   // Private Timer -------------------------------------------- BEGIN
-    // * Private Timer Control Reg (Prescalar = 63, IRQ Enabled, AutoReload Mode, Timer Disabled)
+    // * Private Timer Control Reg (Prescalar = 7, IRQ Enabled, AutoReload Mode, Timer Disabled)
     ldr r0, =PRIVATE_CONTROL
     ldr r1, [r0]
     mov r2, #0xff07 // select bits
     bic r1, r1, r2 // clear [15:8](prescalar) and disable [2:0](IRQ, AutoReload, TimerEnable)
-    mov r2, #0x3f06 // select bits
-    orr r1, r1, r2 // set [15:8]=63=0b0011_1111 and [2:0]=0b110
+    mov r2, #0x0706 // select bits
+    orr r1, r1, r2 // set [15:8]=63=0b0000_0111 and [2:0]=0b110
     str r1, [r0]
-    // * Private Timer Load Reg (LoadValue = 5203124)
+    // * Private Timer Load Reg (LoadValue = 41624)
     ldr r0, =PRIVATE_LOAD
     ldr r1, =TIME_LOAD_VALUE
     str r1, [r0]
@@ -189,19 +185,19 @@ main:
     ldr r0, [sp], #4 // spsr_irq = task's cpsr
     msr spsr, r0
     // * Set Context
-    ldmfd sp, {r0-r14}^ // set context of task
-    add sp, sp, #60
+    ldmfd sp, {r0-r14}^ // set context of task TODO: should sp be modified and write back to TCB?
+    add sp, sp, #60 // TODO: 60??
     // * Start Task
     movs pc, lr // since spsr_irq[Mode] == usr, CPU will run in usr mode from now
 
 @ Start Execution ********************************************************* END
 
 
-forever:
-    b . // should never come to here
+forever: // should never come to here
+    b .
 
 
-csd_irq:
+csd_irq: // context switching
 @ IRQ ******************************************************************* BEGIN
 
   // Save Context & Update Info ------------------------------- BEGIN
@@ -223,7 +219,7 @@ csd_irq:
 
   // Handle Interrupt ----------------------------------------- BEGIN
     // * Read ACK
-    ldr r0, =GICC_IAR
+  	ldr r0, =GICC_IAR
     ldr r12, [r0]
     // * Clear Event Flag of Timer
     ldr r0, =PRIVATE_STATUS
@@ -244,8 +240,8 @@ csd_irq:
     ldr r0, [sp], #4 // spsr_irq = task's cpsr
     msr spsr, r0
     // * Set Context
-    ldmfd sp, {r0-r14}^ // set context of task
-    add sp, sp, #60
+    ldmfd sp, {r0-r14}^ // set context of task TODO: should sp be modified and write back to TCB?
+    add sp, sp, #60 // TODO: 60??
     // * Start Task
     movs pc, lr // since spsr_irq[Mode] == usr, CPU will run in usr mode from now
   // Recover Context -------------------------------------------- END
@@ -253,41 +249,10 @@ csd_irq:
 @ IRQ ********************************************************************* END
 
 
-csd_svc:
-@ SVC ******************************************************************* BEGIN
-
-@ SVC ********************************************************************* END
-
-
-print_time: // use r1 ~ r3, TODO: should be modified for printf
-    ldr r1, =irq_stack_top
-tx_loop:
-    // -------------------  Check to see if the Tx FIFO is empty ------------------------------
-    ldr r2, =uart_Channel_sts_reg0  // get Channel Status Register
-    and r2, r2, #0x8                // get Transmit Buffer Empty bit(bit[3:3])
-    cmp r2, #0x8                    // check if TxFIFO is empty and ready to receive new data
-    bne tx_loop                     // if TxFIFO is NOT empty, keep checking until it is empty
-    // ----------------------------------------------------------------------------------------
-
-    // print time (a single character each iteration)
-    ldr r2, =uart_TX_RX_FIFO0   // set r2 as the FIFO
-    ldrb r3, [r1], #1           // load one byte from MEM[r1] to r3 and update r1 = r1 + 1
-    strb r3, [r2]               // fill the TxFIFO with 0x48
-
-    cmp r3, #0x00 // check if reach the last charater
-    bne tx_loop // if NOT, keep printing
-    mov pc, lr // else return
-
-
 
 
 .data
 .align 4
-
-// SVC stack
-svc_stack_btm:
-    .space 1024
-svc_stack_top:
 
 // IRQ stack (context backup stack for tasks, [sp] need to be initialized!!)
 irq_stack_btm:
