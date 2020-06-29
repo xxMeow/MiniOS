@@ -4,9 +4,12 @@
 
 An embedded miniOS scheduling 3 tasks.
 
-- **Hardware** [ZedBoard](http://www.zedboard.org/product/zedboard) based on Zynq-7000 XC7Z020-CLG484-1
+- **Hardware** [Zynq-7000 XC7Z020-CLG484-1](http://www.zedboard.org/product/zedboard)
 
-- **Development Toos** Vivado (ver. 19.1) & SDK
+- **Development Toos**
+
+    - **Vivado** (ver. 19.1)
+    - **Xilinx SDK**
 
 - All of 3 tasks run forever.
 
@@ -25,4 +28,3 @@ An embedded miniOS scheduling 3 tasks.
         ​	Output to UART console.
 
 - **Scheduling Algorithm** Round-Robin
-
