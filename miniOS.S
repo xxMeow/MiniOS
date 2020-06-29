@@ -185,8 +185,8 @@ main:
     ldr r0, [sp], #4 // spsr_irq = task's cpsr
     msr spsr, r0
     // * Set Context
-    ldmfd sp, {r0-r14}^ // set context of task TODO: should sp be modified and write back to TCB?
-    add sp, sp, #60 // TODO: 60??
+    ldmfd sp, {r0-r14}^ // set context of task
+    add sp, sp, #60 // modify sp
     // * Start Task
     movs pc, lr // since spsr_irq[Mode] == usr, CPU will run in usr mode from now
 
@@ -240,8 +240,8 @@ csd_irq: // context switching
     ldr r0, [sp], #4 // spsr_irq = task's cpsr
     msr spsr, r0
     // * Set Context
-    ldmfd sp, {r0-r14}^ // set context of task TODO: should sp be modified and write back to TCB?
-    add sp, sp, #60 // TODO: 60??
+    ldmfd sp, {r0-r14}^ // set context of task
+    add sp, sp, #60
     // * Start Task
     movs pc, lr // since spsr_irq[Mode] == usr, CPU will run in usr mode from now
   // Recover Context -------------------------------------------- END
